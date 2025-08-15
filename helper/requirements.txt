@@ -1,0 +1,2 @@
+databricks-sdk>=0.20.0
+databricks-ai-bridge>=0.1.0

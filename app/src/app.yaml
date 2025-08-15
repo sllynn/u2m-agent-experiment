@@ -1,0 +1,18 @@
+command: [
+  "streamlit", 
+  "run",
+  "app.py"
+]
+
+env:
+  - name: DATABRICKS_CLIENT_ID
+    valueFrom: client_id
+  - name: DATABRICKS_CLIENT_SECRET
+    valueFrom: client_secret
+  - name: DATABRICKS_HOST
+    value: https://adb-3316477880909836.16.azuredatabricks.net
+  - name: DATABRICKS_MODEL_ENDPOINT
+    value: databricks-claude-3-7-sonnet
+  - name: DATABRICKS_APP_URL
+    value: https://stuart-auth-test-3316477880909836.16.azure.databricksapps.com/
+
