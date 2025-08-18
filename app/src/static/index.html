@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Databricks OBO Flow Demo</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MSAL Browser Library -->
+    <script src="https://alcdn.msauth.net/browser/2.32.2/js/msal-browser.min.js"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+    <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+        <header class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h1 class="text-3xl font-bold text-blue-600">Databricks Cluster Viewer</h1>
+            <p class="text-gray-600 mt-1">A demo of the On-Behalf-Of flow with a JS SPA and Python FastAPI backend.</p>
+        </header>
+
+        <main id="main-content" class="bg-white rounded-lg shadow-md p-6">
+            <!-- Loading View -->
+            <div id="loading-view" class="text-center">
+                <div class="spinner mx-auto mb-4"></div>
+                <p>Loading configuration...</p>
+            </div>
+
+            <!-- Login View -->
+            <div id="login-view" class="hidden">
+                <p class="mb-4">Please sign in with your Microsoft account to continue.</p>
+                <button id="signInButton" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
+                    Sign In
+                </button>
+            </div>
+
+            <!-- Logged In View -->
+            <div id="logged-in-view" class="hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <p>Welcome, <strong id="welcome-name" class="text-blue-700"></strong>!</p>
+                    </div>
+                    <button id="signOutButton" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
+                        Sign Out
+                    </button>
+                </div>
+                <button id="callApiButton" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg w-full transition duration-300">
+                    Fetch Databricks Clusters
+                </button>
+            </div>
+
+            <!-- Results/Status Area -->
+            <div id="results-area" class="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200 min-h-[100px]">
+                <p id="status-message" class="text-gray-500">API results will be displayed here.</p>
+                <pre id="api-response" class="hidden whitespace-pre-wrap break-all text-sm"></pre>
+            </div>
+        </main>
+    </div>
+
+    <script type="text/javascript">
+        // --- Global Variables ---
+        let msalInstance;
+        let apiConfig;
+
+        // --- UI Elements ---
+        const loadingView = document.getElementById("loading-view");
+        const loginView = document.getElementById("login-view");
+        const loggedInView = document.getElementById("logged-in-view");
+        const signInButton = document.getElementById("signInButton");
+        const signOutButton = document.getElementById("signOutButton");
+        const callApiButton = document.getElementById("callApiButton");
+        const welcomeName = document.getElementById("welcome-name");
+        const statusMessage = document.getElementById("status-message");
+        const apiResponse = document.getElementById("api-response");
+
+        /**
+         * Fetches configuration from the backend and initializes the application.
+         */
+        async function initializeApp() {
+            try {
+                const response = await fetch('/auth/config');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch config: ${response.statusText}`);
+                }
+                const config = await response.json();
+
+                // Dynamically create MSAL and API configurations
+                const msalConfig = {
+                    auth: {
+                        clientId: config.clientId,
+                        authority: config.authority,
+                        redirectUri: window.location.origin,
+                    },
+                    cache: {
+                        cacheLocation: "sessionStorage",
+                        storeAuthStateInCookie: false,
+                    }
+                };
+
+                apiConfig = {
+                    scopes: [config.apiScope],
+                    uri: "/api/list-databricks-clusters"
+                };
+
+                // Initialize MSAL PublicClientApplication
+                msalInstance = new msal.PublicClientApplication(msalConfig);
+                
+                // Hide loading view and show the correct content
+                loadingView.classList.add("hidden");
+                updateUI();
+
+            } catch (error) {
+                console.error("Initialization failed:", error);
+                loadingView.innerHTML = `<p class="text-red-500">Error: Could not load application configuration from the server.</p>`;
+            }
+        }
+
+        /**
+         * Updates the UI based on the user's login state.
+         */
+        function updateUI() {
+            if (!msalInstance) return; // Don't run if MSAL isn't initialized
+            const accounts = msalInstance.getAllAccounts();
+            if (accounts.length > 0) {
+                loginView.classList.add("hidden");
+                loggedInView.classList.remove("hidden");
+                loggedInView.classList.add("fade-in");
+                welcomeName.textContent = accounts[0].name || accounts[0].username;
+            } else {
+                loggedInView.classList.add("hidden");
+                loginView.classList.remove("hidden");
+                loginView.classList.add("fade-in");
+            }
+        }
+
+        /**
+         * Handles the sign-in process.
+         */
+        async function signIn() {
+            try {
+                await msalInstance.loginPopup({ scopes: ["User.Read"] });
+                updateUI();
+            } catch (error) {
+                console.error("Login failed:", error);
+                statusMessage.textContent = `Login failed: ${error.message}`;
+            }
+        }
+
+        /**
+         * Handles the sign-out process.
+         */
+        async function signOut() {
+            const currentAccount = msalInstance.getAllAccounts()[0];
+            if (currentAccount) {
+                await msalInstance.logoutPopup({ account: currentAccount });
+            }
+            updateUI();
+        }
+
+        /**
+         * Acquires a token and calls the backend API.
+         */
+        async function callApiAndDisplayClusters() {
+            statusMessage.textContent = "Acquiring token and calling API...";
+            apiResponse.classList.add("hidden");
+            
+            const account = msalInstance.getAllAccounts()[0];
+            if (!account) {
+                statusMessage.textContent = "No account found. Please sign in.";
+                return;
+            }
+
+            const tokenRequest = {
+                scopes: apiConfig.scopes,
+                account: account
+            };
+
+            try {
+                const tokenResponse = await msalInstance.acquireTokenSilent(tokenRequest);
+                
+                const headers = new Headers();
+                headers.append("Authorization", `Bearer ${tokenResponse.accessToken}`);
+                
+                const response = await fetch(apiConfig.uri, { method: "GET", headers: headers });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API Error ${response.status}: ${errorData.detail || response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                statusMessage.textContent = "API call successful!";
+                apiResponse.textContent = JSON.stringify(data, null, 2);
+                apiResponse.classList.remove("hidden");
+
+            } catch (error) {
+                console.error("API call failed:", error);
+                if (error instanceof msal.InteractionRequiredAuthError) {
+                    statusMessage.textContent = "Token acquisition requires interaction. Trying popup...";
+                    try {
+                        await msalInstance.acquireTokenPopup(tokenRequest);
+                        await callApiAndDisplayClusters(); 
+                    } catch (popupError) {
+                        console.error("Popup token acquisition failed:", popupError);
+                        statusMessage.textContent = `Error: ${popupError.message}`;
+                    }
+                } else {
+                    statusMessage.textContent = `Error: ${error.message}`;
+                }
+            }
+        }
+
+        // --- Event Listeners ---
+        signInButton.addEventListener("click", signIn);
+        signOutButton.addEventListener("click", signOut);
+        callApiButton.addEventListener("click", callApiAndDisplayClusters);
+
+        // --- App Initialization ---
+        document.addEventListener("DOMContentLoaded", initializeApp);
+
+    </script>
+</body>
+</html>

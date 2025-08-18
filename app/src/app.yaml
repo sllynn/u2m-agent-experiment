@@ -1,14 +1,18 @@
 command: [
-  "streamlit", 
+  "fastapi", 
   "run",
   "app.py"
 ]
 
 env:
-  - name: DATABRICKS_CLIENT_ID
-    valueFrom: client_id
-  - name: DATABRICKS_CLIENT_SECRET
-    valueFrom: client_secret
+  - name: TENANT_ID
+    value: 9f37a392-f0ae-4280-9796-f1864a10effc
+  - name: SPA_CLIENT_ID
+    value: e1f5dcce-1c3c-4998-b13a-9005118f23e4
+  - name: BACKEND_CLIENT_ID
+    value: 2bf75b70-75bb-466b-9f8f-9babb82be960
+  - name: BACKEND_CLIENT_SECRET
+    valueFrom: backend_client_secret
   - name: DATABRICKS_HOST
     value: https://adb-3636121482767679.19.azuredatabricks.net
   - name: DATABRICKS_MODEL_ENDPOINT

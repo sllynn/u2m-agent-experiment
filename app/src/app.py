@@ -1,213 +1,104 @@
-import streamlit as st
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.errors import DatabricksError
-from databricks.sdk.oauth import Consent, get_workspace_endpoints, SessionCredentials
-from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 import os
-import json
-import secrets
-import hashlib
-import base64
-import traceback
-from urllib.parse import urlencode, parse_qs
+import requests
+import msal
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 # --- Configuration ---
-# It's recommended to set these as environment variables in your Databricks App config
-DATABRICKS_HOST = os.getenv("DATABRICKS_HOST")
-CLIENT_ID = os.getenv("DATABRICKS_CLIENT_ID")
-CLIENT_SECRET = os.getenv("DATABRICKS_CLIENT_SECRET")
-MODEL_SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_MODEL_ENDPOINT")
+# Load these from environment variables or a secure config store.
+TENANT_ID = os.environ.get("TENANT_ID", "YOUR_TENANT_ID")
 
-# The base redirect URL must match one of the URLs registered in your OAuth application
-app_url = os.getenv("DATABRICKS_APP_URL")
-if app_url:
-    # Ensure the URL has no trailing slash for a consistent match with the OAuth app config.
-    BASE_REDIRECT_URL = app_url.rstrip('/')
-else:
-    # Fallback for local development. Ensure this matches a registered localhost URL.
-    BASE_REDIRECT_URL = "http://localhost:8501"
+# ==> BACKEND App Registration Config
+BACKEND_CLIENT_ID = os.environ.get("BACKEND_CLIENT_ID", "YOUR_MIDDLE_TIER_APP_CLIENT_ID")
+BACKEND_CLIENT_SECRET = os.environ.get("BACKEND_CLIENT_SECRET", "YOUR_MIDDLE_TIER_APP_CLIENT_SECRET")
 
+# ==> FRONTEND (SPA) App Registration Config
+# These are now read from the environment and served to the JS front-end.
+SPA_CLIENT_ID = os.environ.get("SPA_CLIENT_ID", "YOUR_SPA_APP_CLIENT_ID")
 
-# --- Authentication State Management ---
-def get_session_state():
-    """Initializes and returns session state variables."""
-    if "creds" not in st.session_state:
-        st.session_state.creds = None
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    return st.session_state
+DATABRICKS_HOST = os.environ.get("DATABRICKS_HOST", "https://<your-databricks-workspace>.azuredatabricks.net")
 
-# --- Authentication Flow ---
-def login():
+AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
+DATABRICKS_SCOPE = ["2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default"]
+
+# --- MSAL Setup ---
+# Initialize the MSAL Confidential Client Application.
+msal_app = msal.ConfidentialClientApplication(
+    client_id=BACKEND_CLIENT_ID,
+    authority=AUTHORITY,
+    client_credential=BACKEND_CLIENT_SECRET,
+)
+
+# --- FastAPI App Initialization ---
+app = FastAPI()
+
+# Configure CORS
+origins = ["http://localhost", "http://localhost:8000"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# --- Pydantic Models for Configuration ---
+class SpaConfig(BaseModel):
+    clientId: str
+    authority: str
+    apiScope: str
+
+# --- API Endpoints ---
+
+@app.get("/auth/config", response_model=SpaConfig)
+def get_spa_config():
     """
-    Initiates a stateless login flow by manually constructing the authorization URL
-    with all necessary context packed into the 'state' parameter.
+    Provides the necessary MSAL configuration to the front-end.
+    This endpoint is unauthenticated.
     """
-    # Step 1: Generate the PKCE verifier and challenge, and a CSRF token.
-    verifier = secrets.token_urlsafe(32)
-    digest = hashlib.sha256(verifier.encode("UTF-8")).digest()
-    challenge = base64.urlsafe_b64encode(digest).decode("UTF-8").replace("=", "")
-    csrf_token = secrets.token_urlsafe(16)
+    return SpaConfig(
+        clientId=SPA_CLIENT_ID,
+        authority=AUTHORITY,
+        apiScope=f"api://{BACKEND_CLIENT_ID}/.default"
+    )
 
-    # Step 2: Pack the verifier and CSRF token into a dictionary. This is our custom state.
-    app_state_payload = {'verifier': verifier, 'csrf': csrf_token}
-    
-    # Step 3: JSON-serialize and URL-encode our custom state. This will be the value of the 'state' param.
-    final_state = urlencode({'app_state': json.dumps(app_state_payload)})
-
-    # Step 4: Manually construct the authorization URL.
-    oidc_endpoints = get_workspace_endpoints(DATABRICKS_HOST)
-    params = {
-        "response_type": "code",
-        "client_id": CLIENT_ID,
-        "redirect_uri": BASE_REDIRECT_URL,
-        "scope": "all-apis offline_access",
-        "state": final_state,
-        "code_challenge": challenge,
-        "code_challenge_method": "S256",
-    }
-    auth_url = f"{oidc_endpoints.authorization_endpoint}?{urlencode(params)}"
-
-    # Step 5: Display the link to the user.
-    st.markdown(f'<a href="{auth_url}" target="_self">Click here to log in to Databricks</a>', unsafe_allow_html=True)
-    st.info("After authenticating, you will be redirected back here.")
-    st.stop()
-
-
-def handle_oauth_callback():
+@app.get("/api/list-databricks-clusters")
+def list_databricks_clusters(token: str = Depends(oauth2_scheme)):
     """
-    Handles the OAuth callback by extracting the code and our custom state from the
-    URL to complete the token exchange.
+    Performs the On-Behalf-Of flow.
     """
-    query_params = st.query_params
+    result = msal_app.acquire_token_on_behalf_of(
+        user_assertion=token,
+        scopes=DATABRICKS_SCOPE
+    )
 
-    # The state from Databricks will contain our URL-encoded app_state.
-    if "code" in query_params and "state" in query_params:
-        try:
-            # Step 1: The 'state' param contains our 'app_state' payload. Parse it.
-            state_query = parse_qs(query_params['state'])
-            if 'app_state' not in state_query:
-                st.error("Incomplete state returned from authentication server.")
-                st.stop()
-            
-            app_state_json = state_query['app_state'][0]
-            app_state_payload = json.loads(app_state_json)
-            verifier = app_state_payload['verifier']
+    if "error" in result:
+        print(f"MSAL Error: {result.get('error_description')}")
+        raise HTTPException(
+            status_code=401,
+            detail=result.get("error_description", "Failed to acquire token on behalf of user.")
+        )
 
-            # Step 2: Manually construct a Consent object with the necessary details
-            # to perform the token exchange, including the client secret.
-            oidc_endpoints = get_workspace_endpoints(DATABRICKS_HOST)
-            consent = Consent(
-                state=query_params['state'],
-                verifier=verifier,
-                authorization_url="", # Not needed for exchange
-                redirect_url=BASE_REDIRECT_URL,
-                token_endpoint=oidc_endpoints.token_endpoint,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET, # Provide the client secret for the exchange
-            )
-            
-            # Step 3: Exchange the authorization code for credentials. The `exchange` method
-            # performs the necessary state validation.
-            creds = consent.exchange(code=query_params['code'], state=query_params['state'])
-            
-            # Step 4: Store the full credentials object in the session and clean up the URL.
-            st.session_state.creds = creds.as_dict()
-            st.query_params.clear()
-            st.rerun()
-        except DatabricksError as e:
-            st.error(f"Failed to get access token: {e}")
-            st.stop()
-        except Exception as e:
-            st.error(f"An error occurred during authentication: {e}")
-            st.stop()
-
-
-# --- LLM Interaction ---
-def call_llm(w_client, messages_history, new_prompt, token):
-    """
-    Calls the Databricks Model Serving endpoint with the user's prompt and chat history.
-    """
-    if not MODEL_SERVING_ENDPOINT_NAME:
-        st.error("DATABRICKS_MODEL_ENDPOINT environment variable is not set.")
-        return "Model endpoint not configured."
-
-    # Combine the history with the new prompt into a list of dictionaries
-    raw_messages = messages_history + [{"role": "user", "content": new_prompt}]
-
-    # Convert the list of dictionaries into a list of ChatMessage objects
-    messages_payload = [
-        ChatMessage(role=ChatMessageRole(msg["role"]), content=msg["content"]) for msg in raw_messages
-    ]
+    databricks_access_token = result['access_token']
+    api_url = f"{DATABRICKS_HOST}/api/2.0/clusters/list"
+    headers = {"Authorization": f"Bearer {databricks_access_token}"}
 
     try:
-        response = w_client.serving_endpoints.query(
-            name=MODEL_SERVING_ENDPOINT_NAME,
-            messages=messages_payload,
-            extra_params={"u2mToken": token.access_token},
-            max_tokens=256,
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        # Also print the exception and a full stack trace to the UI for easier debugging
-        st.error(f"Error calling model endpoint: {e}")
-        st.expander("Full Stack Trace").code(traceback.format_exc())
-        return "Sorry, I encountered an error."
-
-# --- Main Application UI ---
-def main():
-    """Main function to run the Streamlit app."""
-    st.title("📄 Chat with Databricks LLM")
-    st.write("This application demonstrates U2M OAuth and a chat interface with a Databricks Model Serving endpoint.")
-
-    get_session_state()
-    handle_oauth_callback()
-
-    if st.session_state.creds is None:
-        st.write("You are not logged in.")
-        if st.button("Login with Databricks"):
-            login()
-    else:
-        st.success("Successfully authenticated!")
-        st.write("You can now chat with the LLM.")
-
-        # Reconstruct the credentials strategy from the session state.
-        oidc_endpoints = get_workspace_endpoints(DATABRICKS_HOST)
-        credentials_strategy = SessionCredentials.from_dict(
-            st.session_state.creds,
-            token_endpoint=oidc_endpoints.token_endpoint,
-            client_id=CLIENT_ID,
-            client_secret=CLIENT_SECRET,
-            redirect_url=BASE_REDIRECT_URL,
+        response = requests.get(api_url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.HTTPError as err:
+        raise HTTPException(
+            status_code=err.response.status_code,
+            detail=f"Error calling Databricks API: {err.response.text}"
         )
 
-        # Initialize WorkspaceClient with the credentials strategy.
-        w_client = WorkspaceClient(host=DATABRICKS_HOST, credentials_strategy=credentials_strategy)
-        
-        # Get the current token for passing to the LLM.
-        current_token = credentials_strategy.token()
+# --- Static File Serving ---
+# IMPORTANT: This must come AFTER your API routes.
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-
-        if prompt := st.chat_input("What would you like to ask?"):
-            # Display the user's message immediately
-            with st.chat_message("user"):
-                st.markdown(prompt)
-
-            # Get the response from the LLM
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                with st.spinner("Thinking..."):
-                    # Pass the existing history and the new prompt to the LLM function
-                    full_response = call_llm(w_client, st.session_state.messages, prompt, current_token)
-                message_placeholder.markdown(full_response)
-            
-            # Now, add both the user prompt and the assistant response to the history for the next turn
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-
-if __name__ == "__main__":
-    main()
