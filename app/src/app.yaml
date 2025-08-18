@@ -10,9 +10,9 @@ env:
   - name: DATABRICKS_CLIENT_SECRET
     valueFrom: client_secret
   - name: DATABRICKS_HOST
-    value: https://adb-3316477880909836.16.azuredatabricks.net
+    value: https://adb-3636121482767679.19.azuredatabricks.net
   - name: DATABRICKS_MODEL_ENDPOINT
     value: databricks-claude-3-7-sonnet
   - name: DATABRICKS_APP_URL
-    value: https://stuart-auth-test-3316477880909836.16.azure.databricksapps.com/
+    value: https://u2m-agent-experiment-3636121482767679.19.azure.databricksapps.com
 
