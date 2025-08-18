@@ -188,6 +188,10 @@
             try {
                 const tokenResponse = await msalInstance.acquireTokenSilent(tokenRequest);
                 
+                // --- DEBUGGING: Log the token to the console ---
+                console.log("Acquired Access Token to send to backend:", tokenResponse.accessToken);
+                // ---------------------------------------------
+
                 const headers = new Headers();
                 headers.append("Authorization", `Bearer ${tokenResponse.accessToken}`);
                 
