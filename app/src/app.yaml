@@ -6,9 +6,9 @@ command: [
 
 env:
   - name: DATABRICKS_CLIENT_ID
-    valueFrom: client_id
+    value: 6c0908bb-6032-4410-a5e8-80688dc516e9
   - name: DATABRICKS_CLIENT_SECRET
-    valueFrom: client_secret
+    valueFrom: databricks_client_secret
   - name: DATABRICKS_HOST
     value: https://adb-3636121482767679.19.azuredatabricks.net
   - name: DATABRICKS_MODEL_ENDPOINT
