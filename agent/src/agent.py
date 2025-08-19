@@ -64,6 +64,7 @@ class SimpleChatAgent(ResponsesAgent):
         ]
         return ResponsesAgentResponse(output=outputs, custom_outputs=request.custom_inputs)
 
+    @mlflow.trace()
     def predict_stream(
         self,
         request: ResponsesAgentRequest,
