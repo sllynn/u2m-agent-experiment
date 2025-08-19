@@ -84,11 +84,20 @@ class SimpleChatAgent(ResponsesAgent):
             cc_msgs = [{"role": "system", "content": self.system_prompt}] + cc_msgs
 
         # Stream the response from the LLM
+        full_response = ""
+        item_id = str(uuid4())
+        
         for chunk in self.llm.stream(cc_msgs):
             if isinstance(chunk, AIMessageChunk) and (content := chunk.content):
+                full_response += content
                 yield ResponsesAgentStreamEvent(
-                    **self.create_text_delta(delta=content, item_id=chunk.id),
+                    **self.create_text_delta(delta=content, item_id=item_id),
                 )
+        
+        # Yield the final completion event
+        yield ResponsesAgentStreamEvent(
+            **self.create_text_output_item(text=full_response, id=item_id),
+        )
 
 
 # Create the agent object and set it for MLflow
