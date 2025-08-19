@@ -83,21 +83,23 @@ class SimpleChatAgent(ResponsesAgent):
         if cc_msgs:
             cc_msgs = [{"role": "system", "content": self.system_prompt}] + cc_msgs
 
-        # Stream the response from the LLM
-        full_response = ""
-        item_id = str(uuid4())
-        
-        for chunk in self.llm.stream(cc_msgs):
-            if isinstance(chunk, AIMessageChunk) and (content := chunk.content):
-                full_response += content
-                yield ResponsesAgentStreamEvent(
-                    **self.create_text_delta(delta=content, item_id=item_id),
-                )
-        
-        # Yield the final completion event
-        yield ResponsesAgentStreamEvent(
-            **self.create_text_output_item(text=full_response, id=item_id),
-        )
+         # Limit history to the most recent max_history_messages
+        if len(cc_msgs) > self.max_history_messages:
+            cc_msgs = cc_msgs[-self.max_history_messages:]
+        for event in self.agent.stream({"messages": cc_msgs}, stream_mode=["updates", "messages"]):
+            if event[0] == "updates":
+                for node_data in event[1].values():
+                    for item in self._langchain_to_responses(node_data["messages"]):
+                        yield ResponsesAgentStreamEvent(type="response.output_item.done", item=item)
+            elif event[0] == "messages":
+                try:
+                    chunk = event[1][0]
+                    if isinstance(chunk, AIMessageChunk) and (content := chunk.content):
+                        yield ResponsesAgentStreamEvent(
+                            **self.create_text_delta(delta=content, item_id=chunk.id),
+                        )
+                except Exception:
+                    pass
 
 
 # Create the agent object and set it for MLflow
