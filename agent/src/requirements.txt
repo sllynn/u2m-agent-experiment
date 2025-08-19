@@ -1,5 +1,5 @@
 mlflow[databricks]>=3.1.0
 databricks-langchain>=0.6.0
-langchain-core>=0.1.0
+langchain-core>=0.3.74
 databricks-sdk>=0.63.0
 uv
