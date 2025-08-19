@@ -10,7 +10,7 @@ env:
   - name: SPA_CLIENT_ID
     value: e1f5dcce-1c3c-4998-b13a-9005118f23e4
   - name: BACKEND_CLIENT_ID
-    value: 2bf75b70-75bb-466b-9f8f-9babb82be960
+    value: 0dc80de8-cf11-465f-a7ec-17100eaac099
   - name: BACKEND_CLIENT_SECRET
     valueFrom: backend_client_secret
   - name: DATABRICKS_HOST
