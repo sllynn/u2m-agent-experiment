@@ -144,7 +144,7 @@ def call_llm(w_client, messages_history, new_prompt, token):
         response = w_client.serving_endpoints.query(
             name=MODEL_SERVING_ENDPOINT_NAME,
             messages=messages_payload,
-            extra_params={"u2mToken": token.access_token},
+            # extra_params={"u2mToken": token.access_token},
             max_tokens=256,
         )
         return response.choices[0].message.content
