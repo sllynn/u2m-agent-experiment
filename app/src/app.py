@@ -95,7 +95,7 @@ def login_local():
         "client_id": CLIENT_ID,
         "redirect_uri": BASE_REDIRECT_URL,
         "scope": "all-apis",
-        "state": nonce,
+        "state": {"nonce": nonce, "verifier": verifier},
         # "state": final_state,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
