@@ -160,7 +160,7 @@ def login_xws():
     nonce = secrets.token_hex(32)
 
 
-    xws_redirect_url = f"{BASE_REDIRECT_URL}?{urlencode({"this": st.session_state.local_creds})}"
+    xws_redirect_url = f"{BASE_REDIRECT_URL}?{urlencode({'this': st.session_state.local_creds})}"
 
     # Step 4: Manually construct the authorization URL.
     oidc_endpoints = get_workspace_endpoints(DATABRICKS_HOST_XWS)
