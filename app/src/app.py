@@ -244,7 +244,7 @@ def handle_oauth_callback():
         st.rerun()
 
 # --- Credential Management ---
-def get_credentials_strategy() -> credentials_strategy.CredentialsStrategy:
+def get_credentials_strategy() -> SessionCredentials:
     """
     Returns a credentials strategy for the local workspace.
     """
