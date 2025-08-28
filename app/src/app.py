@@ -238,6 +238,7 @@ def handle_oauth_callback():
         # full login process complete
     else:
         st.session_state.local_creds = process_query_params(query_params)
+        st.write(st.session_state.local_creds)
         st.session_state.exchanged_creds = exchange_local_creds()
         
         # local login process complete
