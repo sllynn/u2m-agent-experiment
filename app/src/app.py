@@ -226,6 +226,9 @@ def handle_oauth_callback():
     """
     query_params = st.query_params
 
+    if not query_params:
+        return
+
     if "this" in query_params:
         # we're already authenticated in the local workspace
         st.session_state.local_creds = query_params["this"]
