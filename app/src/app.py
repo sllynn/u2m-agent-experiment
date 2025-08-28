@@ -59,7 +59,7 @@ def process_query_params(query_params: dict) -> dict[str, str]:
     """
     if "code" in query_params and "state" in query_params:        # if 'app_state' not in state_query:
         try:
-            state_dict = json.loads(query_params['state'])
+            state_dict = json.loads(query_params['state'].replace("'", '"'))
             state_dict = {"nonce": state_dict['nonce'], "verifier": state_dict['verifier']}
         except json.JSONDecodeError:
             state_dict = {"nonce": query_params['state']}
