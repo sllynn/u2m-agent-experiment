@@ -128,7 +128,7 @@ def exchange_local_creds() -> dict:
     
     # Step 3: Exchange the authorization code for credentials. The `exchange` method
     # performs the necessary state validation.
-    creds = consent.exchange(code=st.session_state.local_creds['code'], state=st.session_state.local_creds['state'])
+    creds = consent.exchange(code=st.session_state.local_creds['code'], state=st.session_state.local_creds['nonce'])
     
     # Step 4: Store the full credentials object in the session and clean up the URL.
     return creds.as_dict()
