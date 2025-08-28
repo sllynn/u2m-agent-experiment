@@ -160,7 +160,7 @@ def login_xws():
     nonce = secrets.token_hex(32)
 
 
-    xws_redirect_url = f"{BASE_REDIRECT_URL}?{urlencode(json.dumps({'this': st.session_state.local_creds}))}"
+    xws_redirect_url = f"{BASE_REDIRECT_URL}?{urlencode({'this': json.dumps(st.session_state.local_creds)})}"
 
     # Step 4: Manually construct the authorization URL.
     oidc_endpoints = get_workspace_endpoints(DATABRICKS_HOST_XWS)
@@ -231,7 +231,7 @@ def handle_oauth_callback():
 
     if "this" in query_params:
         # we're already authenticated in the local workspace
-        st.session_state.local_creds = query_params["this"]
+        st.session_state.local_creds = json.loads(query_params["this"])
         st.session_state.exchanged_creds = exchange_local_creds()
         st.session_state.foreign_creds = process_query_params(query_params)
         write_foreign_workspace_creds(st.session_state.foreign_creds['verifier'], st.session_state.foreign_creds['code'])
