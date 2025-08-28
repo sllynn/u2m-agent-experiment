@@ -114,30 +114,30 @@ def exchange_local_creds() -> dict:
 
     # Step 2: Manually construct a Consent object with the necessary details
     # to perform the token exchange, including the client secret.
-    try:
-        oidc_endpoints = get_workspace_endpoints(DATABRICKS_HOST)
-        consent = Consent(
-            state=st.session_state.local_creds['nonce'],
-            verifier=st.session_state.local_creds['verifier'],
-            authorization_url="", # Not needed for exchange
-            redirect_url=BASE_REDIRECT_URL,
-            token_endpoint=oidc_endpoints.token_endpoint,
-            client_id=CLIENT_ID,
-            client_secret=CLIENT_SECRET, # Provide the client secret for the exchange
-        )
-        
-        # Step 3: Exchange the authorization code for credentials. The `exchange` method
-        # performs the necessary state validation.
-        creds = consent.exchange(code=st.session_state.local_creds['code'], state=st.session_state.local_creds['state'])
-        
-        # Step 4: Store the full credentials object in the session and clean up the URL.
-        return creds.as_dict()
-    except DatabricksError as e:
-        st.error(f"Failed to get access token during token exchange: {e}")
-        st.stop()
-    except Exception as e:
-        st.error(f"An error occurred during authentication: {e}")
-        st.stop()
+    # try:
+    oidc_endpoints = get_workspace_endpoints(DATABRICKS_HOST)
+    consent = Consent(
+        state=st.session_state.local_creds['nonce'],
+        verifier=st.session_state.local_creds['verifier'],
+        authorization_url="", # Not needed for exchange
+        redirect_url=BASE_REDIRECT_URL,
+        token_endpoint=oidc_endpoints.token_endpoint,
+        client_id=CLIENT_ID,
+        client_secret=CLIENT_SECRET, # Provide the client secret for the exchange
+    )
+    
+    # Step 3: Exchange the authorization code for credentials. The `exchange` method
+    # performs the necessary state validation.
+    creds = consent.exchange(code=st.session_state.local_creds['code'], state=st.session_state.local_creds['state'])
+    
+    # Step 4: Store the full credentials object in the session and clean up the URL.
+    return creds.as_dict()
+    # except DatabricksError as e:
+    #     st.error(f"Failed to get access token during token exchange: {e}")
+    #     st.stop()
+    # except Exception as e:
+    #     st.error(f"An error occurred during authentication: {e}")
+    #     st.stop()
 
 # --- Foreign Workspace Authentication ---
 def login_xws():
