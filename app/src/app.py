@@ -117,7 +117,7 @@ def exchange_local_creds() -> dict:
     try:
         oidc_endpoints = get_workspace_endpoints(DATABRICKS_HOST)
         consent = Consent(
-            state=st.session_state.local_creds['state'],
+            state=st.session_state.local_creds['nonce'],
             verifier=st.session_state.local_creds['verifier'],
             authorization_url="", # Not needed for exchange
             redirect_url=BASE_REDIRECT_URL,
